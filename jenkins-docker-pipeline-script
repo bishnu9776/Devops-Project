@@ -1,0 +1,31 @@
+node() {
+    stage('Git checkout'){
+        git credentialsId: '78029f93-2fe7-4a6b-bf5b-72c0dabc77a1', url: 'https://github.com/bishnu9776/gradle-web-app.git'
+    }
+    stage('gradleCleanBuild'){
+        def gradleHome = tool name:'gradle-5.2.1', type:'gradle'
+        def gradleCmd = "${gradleHome}/bin/gradle"
+        sh "${gradleCmd} clean build"
+    }
+    
+    stage('build Docker image'){
+        sh 'docker build -t bishnu9776/gradle-web-app .'
+    }
+    
+    stage('PushDockerImage'){
+        withCredentials([string(credentialsId: 'DockerHubPwd', variable: 'DockerHubPwd')]) { 
+            sh "docker login -u bishnu9776 -p ${DockerHubPwd}"
+        }
+        sh 'docker push bishnu9776/gradle-web-app'
+    }
+    
+    stage('Run Docker Image In Dev Server'){
+        def dockerRun = ' docker run  -d -p 8080:8080 --name gradle-web-app bishnu9776/gradle-web-app'
+        sshagent(['DeploymentServerKey']) {
+          sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.38.46 docker stop gradle-web-app || true'
+          sh 'ssh  ubuntu@172.31.38.46 docker rm gradle-web-app || true'
+          sh 'ssh  ubuntu@172.31.38.46 docker rmi -f  $(docker images -q) || true'
+          sh "ssh  ubuntu@172.31.38.46 ${dockerRun}"
+       }
+    }
+}
